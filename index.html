@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
   The source file stays local-only. The Vercel build enables only the Supabase
-  endpoints needed for Google sign-in and this user's journal.
+  endpoints needed for Supabase anonymous sessions and this user's journal.
 -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'none';
@@ -248,11 +248,6 @@ label.f > span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;colo
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);z-index:90;background:var(--brass);
   color:#171203;font-weight:600;padding:9px 18px;border-radius:6px;opacity:0;transition:all .22s ease;pointer-events:none;max-width:80vw}
 .toast.on{opacity:1;transform:translateX(-50%)}
-.auth-gate{min-height:80vh;display:grid;place-items:center;padding:24px}
-.auth-gate .panel{width:min(440px,100%);padding:24px}
-.auth-gate h1{font-family:var(--font-display);font-weight:400;font-size:24px;margin:0 0 8px}
-.auth-gate p{margin:0 0 18px}
-body.auth-required>.topbar,body.auth-required>#firstRun,body.auth-required>main,body.auth-required>.appfoot{display:none!important}
 .note-item{border:1px solid var(--line);border-radius:7px;padding:12px 14px;margin-bottom:10px;background:var(--panel)}
 .note-item .nd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .note-item p{margin:0;color:var(--muted);white-space:pre-wrap}
@@ -290,8 +285,6 @@ body.auth-required>.topbar,body.auth-required>#firstRun,body.auth-required>main,
   .topbar .brand{order:1}
   #acctSel{order:2;flex:1 1 auto;max-width:none;min-width:0}
   #addBtn{order:3}
-  #authControls{order:4;flex:1 1 100%;justify-content:flex-end;padding:6px 0}
-  #syncStatus{order:5}
   nav{order:6;flex:0 0 100%;width:100%;margin-top:8px;padding:2px 0 6px;
       border-top:1px solid var(--line-soft);overflow-x:auto}
   .tab{padding:8px 12px}
@@ -355,20 +348,7 @@ body.auth-required>.topbar,body.auth-required>#firstRun,body.auth-required>main,
     <button class="tab" data-view="settings">Settings</button>
   </nav>
   <span id="syncStatus" class="hint" aria-live="polite" style="display:none"></span>
-  <div id="authControls" style="display:none;align-items:center;gap:8px">
-    <span id="authEmail" class="hint"></span>
-    <button class="btn btn-sm" id="signOutBtn">Sign out</button>
-  </div>
   <button class="btn btn-primary" id="addBtn">+ Log trade</button>
-</div>
-
-<div id="authGate" style="display:none">
-  <div class="panel">
-    <h1>Sign in to your journal</h1>
-    <p id="authMessage" class="hint" aria-live="polite">Your journal is stored in your private Supabase account.</p>
-    <button class="btn btn-primary" id="googleSignIn">Continue with Google</button>
-    <button class="btn btn-primary" id="retryLoadBtn" style="display:none">Retry loading journal</button>
-  </div>
 </div>
 
 <div id="firstRun" style="display:none;max-width:1300px;margin:18px auto 0;padding:0 18px">
@@ -377,7 +357,7 @@ body.auth-required>.topbar,body.auth-required>#firstRun,body.auth-required>main,
     gives no trade recommendations or forecasts. P&amp;L is computed from what you enter and from a built-in
     contract spec table that can be incomplete or out of date, so reconcile against your broker statements
     and use your broker&rsquo;s records for taxes. When cloud sync is enabled, journal data is stored in your
-    Supabase account; otherwise it stays in this browser. Back up regularly. Provided as-is with no warranty.
+    anonymous Supabase session; otherwise it stays in this browser. Back up regularly. Provided as-is with no warranty.
     Trading leveraged products carries substantial risk of loss.
     <div style="margin-top:10px"><button class="btn btn-sm btn-primary" id="firstRunOk">Understood</button></div>
   </div>
@@ -554,7 +534,7 @@ body.auth-required>.topbar,body.auth-required>#firstRun,body.auth-required>main,
 
     <div class="sec-head"><h2 class="sec">Your data</h2><div class="rule"></div></div>
     <div class="panel" style="padding:18px">
-      <p class="hint" style="margin-top:0">Cloud-enabled deployments save your journal to your signed-in Supabase account. The standalone file stores data in this browser. Back up regularly.</p>
+      <p class="hint" style="margin-top:0">Cloud-enabled deployments save your journal to an anonymous Supabase session. The standalone file stores data in this browser. Back up regularly.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
         <button class="btn btn-primary" id="expBtn">Back up to file</button>
         <button class="btn" id="csvBtn2">Export CSV</button>
@@ -585,8 +565,8 @@ body.auth-required>.topbar,body.auth-required>#firstRun,body.auth-required>main,
         Trading futures and other leveraged instruments involves substantial risk of loss. Past results shown
         in this journal do not predict future performance.</div>
       <div class="disc"><b>Your data storage depends on how you run the app.</b> The standalone source file
-        stores data in this browser and does not connect to a server. A cloud-enabled deployment uses Google
-        sign-in and Supabase for your journal. Review your Supabase row-level security policy and keep
+        stores data in this browser and does not connect to a server. A cloud-enabled deployment uses an
+        anonymous Supabase session for your journal. Review your Supabase row-level security policy and keep
         JSON backups; clearing browser data does not delete cloud records, but deleting your Supabase project
         or account can.</div>
       <div class="disc"><b>Replay price data.</b> The app does not download market data; price bars for candle
@@ -846,22 +826,33 @@ var APP_VERSION = "1.0.5";
 var KEY = "traderedge.journal.v2";
 var LEGACY_KEYS = ["ledger.journal.v2","ledger.journal.v1"];
 var Store = {
-  mode:"memory", mem:null, api:null, auth:null, db:null, storage:null, user:null,
+  mode:"memory", mem:null, api:null, auth:null, user:null,
   cached:null, queue:Promise.resolve(),
   async init(){
     var config = window.__SUPABASE_CONFIG__;
     if (config && config.url && config.anonKey){
-      this.mode = "supabase";
-      showAuthGate("Checking your Supabase sign-in…", false);
-      var mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
-      this.api = mod.createClient(config.url,config.anonKey,{
-        auth:{persistSession:true,detectSessionInUrl:true,autoRefreshToken:true}
-      });
-      this.auth = this.api.auth;
-      var sessionResult = await this.auth.getSession();
-      if (sessionResult.error) throw sessionResult.error;
-      this.user = sessionResult.data.session ? sessionResult.data.session.user : null;
-      return;
+      try{
+        this.mode = "supabase";
+        var mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+        this.api = mod.createClient(config.url,config.anonKey,{
+          auth:{persistSession:true,detectSessionInUrl:true,autoRefreshToken:true}
+        });
+        this.auth = this.api.auth;
+        var sessionResult = await this.auth.getSession();
+        if (sessionResult.error) throw sessionResult.error;
+        var session = sessionResult.data.session;
+        if (!session){
+          var authResult = await this.auth.signInAnonymously();
+          if (authResult.error) throw authResult.error;
+          session = authResult.data.session;
+        }
+        if (!session) throw new Error("Supabase did not create an anonymous session.");
+        this.user = session.user;
+        return;
+      }catch(error){
+        this.mode = "local";
+        toast("Supabase anonymous access failed; using this browser only: "+error.message);
+      }
     }
     try{
       localStorage.setItem("__t","1"); localStorage.removeItem("__t");
@@ -890,7 +881,7 @@ var Store = {
     return this.loadLocal();
   },
   async loadSupabase(){
-    if (!this.user) throw new Error("Sign in to Supabase before loading your journal.");
+    if (!this.user) throw new Error("The anonymous Supabase session is unavailable. Reload the app to retry.");
     var result = await this.api.from("trader_edge_journals")
       .select("data")
       .eq("user_id",this.user.id)
@@ -902,7 +893,7 @@ var Store = {
   },
   clone(value){ return JSON.parse(JSON.stringify(value)); },
   async syncSupabase(data){
-    if (!this.user) throw new Error("Your Supabase session has expired. Sign in again to sync.");
+    if (!this.user) throw new Error("The anonymous Supabase session is unavailable. Reload the app to retry.");
     var result = await this.api.from("trader_edge_journals").upsert({
       user_id:this.user.id,
       data:data,
@@ -933,18 +924,6 @@ var Store = {
       if (this.mode === "local"){ localStorage.setItem(KEY, JSON.stringify(data)); return true; }
       this.mem = data; return true;
     }catch(error){ toast("Browser storage save failed: "+error.message+" — export a backup."); return false; }
-  },
-  async signIn(){
-    var result = await this.auth.signInWithOAuth({
-      provider:"google",
-      options:{redirectTo:location.origin+location.pathname}
-    });
-    if (result.error) throw result.error;
-  },
-  async signOut(){
-    await this.queue;
-    var result = await this.auth.signOut();
-    if (result.error) throw result.error;
   },
   bytes(){ try{ return this.mode==="local" ? (localStorage.getItem(KEY)||"").length : JSON.stringify(state).length; }catch(e){ return 0; } }
 };
@@ -990,21 +969,6 @@ function ts(date,time){ return new Date(date + "T" + (time || "00:00") + ":00").
 function toast(msg){
   var t = $("toast"); t.textContent = msg; t.classList.add("on");
   clearTimeout(t._t); t._t = setTimeout(function(){ t.classList.remove("on"); }, 3200);
-}
-function showAuthGate(message,allowSignIn,allowRetry){
-  $("authMessage").textContent = message;
-  $("authGate").style.display = "grid";
-  $("googleSignIn").style.display = allowSignIn && Store.api ? "" : "none";
-  $("retryLoadBtn").style.display = allowRetry || Store.user || (Store.mode === "supabase" && !Store.api) ? "" : "none";
-  document.body.classList.add("auth-required");
-}
-function hideAuthGate(){
-  $("authGate").style.display = "none";
-  document.body.classList.remove("auth-required");
-  if (Store.mode === "supabase"){
-    $("authEmail").textContent = Store.user.email || "Supabase account";
-    $("authControls").style.display = "flex";
-  }
 }
 function updateSyncStatus(status){
   var el = $("syncStatus");
@@ -1619,7 +1583,7 @@ function renderSettings(){
       '<button class="btn btn-sm" data-acctedit="'+a.id+'">Edit</button></div></div>';
   }).join("");
   var kb = Store.bytes()/1024;
-  var where = Store.mode==="supabase" ? "your Supabase account" : Store.mode==="local" ? "this browser profile on this PC" : "memory only (this session)";
+  var where = Store.mode==="supabase" ? "your anonymous Supabase session" : Store.mode==="local" ? "this browser profile on this PC" : "memory only (this session)";
   var nBars = Object.keys(state.bars||{}).length;
   $("storeInfo").innerHTML = "Saved in " + where + " · " + state.trades.length + " trades · " + nBars + " bar sets · " +
     (kb>1024 ? (kb/1024).toFixed(2)+" MB" : kb.toFixed(0)+" KB") + " used" +
@@ -3237,46 +3201,29 @@ function journalSignature(data){
   }
   return JSON.stringify(stable(normalized));
 }
-$("googleSignIn").addEventListener("click",async function(){
-  $("googleSignIn").disabled = true;
-  $("authMessage").textContent = "Opening Google sign-in…";
-  try{
-    await Store.signIn();
-    location.reload();
-  }catch(error){
-    $("authMessage").textContent = "Google sign-in failed: "+error.message;
-    $("googleSignIn").disabled = false;
-  }
-});
-$("retryLoadBtn").addEventListener("click",function(){ boot(); });
-$("signOutBtn").addEventListener("click",async function(){
-  $("signOutBtn").disabled = true;
-  try{
-    clearTimeout(saveTimer);
-    await Store.save(state);
-    await Store.signOut();
-    location.reload();
-  }catch(error){
-    $("signOutBtn").disabled = false;
-    toast("Could not sign out safely: "+error.message);
-  }
-});
 async function boot(){
   try{
     await Store.init();
-    if (Store.mode === "supabase" && !Store.user){
-      showAuthGate("Sign in with Google to open your private, Supabase-synced journal.",true);
-      return;
+    var saved;
+    try{
+      saved = await Store.load();
+    }catch(error){
+      if (Store.mode !== "supabase") throw error;
+      toast("Supabase journal could not be loaded; opening the saved browser copy: "+error.message);
+      saved = await Store.loadLocal();
+      Store.mode = "local";
+      if (saved){
+        try{ localStorage.setItem(KEY,JSON.stringify(saved)); }
+        catch(cacheError){ toast("Could not copy the journal to local storage: "+cacheError.message); }
+      }
     }
-    if (Store.mode === "supabase") hideAuthGate();
-    var saved = await Store.load();
     if (Store.mode === "supabase"){
       var local = await Store.loadLocal();
       if (!saved && local){
         state = migrate(local);
         if (!await Store.save(state)) throw new Error("The existing browser journal could not be uploaded.");
         saved = state;
-        toast("This Supabase account's saved cache was restored to the cloud.");
+        toast("This anonymous session's saved cache was restored to the cloud.");
       }else if (saved){
         var cloudState = migrate(saved);
         if (local && journalSignature(local) !== journalSignature(cloudState)){
@@ -3318,8 +3265,7 @@ async function boot(){
     if (Store.mode === "supabase" && !saved) await Store.save(state);
     if (saved && saved.version !== 2) persist();
   }catch(error){
-    showAuthGate("Could not open your journal: "+error.message,false,true);
-    updateSyncStatus("error");
+    toast("Could not open your journal: "+error.message);
   }
 }
 boot();

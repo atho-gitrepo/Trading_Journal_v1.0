@@ -3,7 +3,7 @@ https://smackey321.github.io/trader-edge-tracker/
 
 An offline-capable trading journal in a single HTML file. Open the source file
 without Supabase configuration to keep data in your browser, or build and deploy
-the app to Vercel with Supabase configuration for Google sign-in and cloud sync.
+the app to Vercel with Supabase configuration for anonymous cloud sync.
 
 Built for futures traders in particular, but it handles stocks, options, forex
 and crypto too.
@@ -120,18 +120,23 @@ The standalone source file uses this browser's local storage and does not
 connect to a server. Clearing browser data or switching browsers can make that
 local journal unavailable.
 
-The Vercel build uses Google sign-in and Supabase. Accounts, trades, journal
-notes, screenshots, and imported bar sets are stored as JSON in a row owned by
-the signed-in user. The included SQL enables row-level security so only that
-authenticated user can read or write their journal.
+The Vercel build creates a Supabase anonymous session automatically; no sign-in
+screen or Google OAuth setup is required. Accounts, trades, journal notes,
+screenshots, and imported bar sets are stored as JSON in a row owned by that
+anonymous user. The included SQL enables row-level security so each session can
+only read or write its own journal.
 
 Before switching from the standalone/local version to Vercel, export a JSON
 backup from the version that currently holds your trades. Browser storage from
 `file://` or another site is not automatically visible to the Vercel domain;
-after signing in, use **Settings → Restore backup** to import that file. Device
-caches created by the cloud version are scoped to the signed-in Supabase account.
+use **Settings → Restore backup** to import that file. Device caches created by
+the cloud version are scoped to the anonymous Supabase session.
 If a device cache differs from Supabase, the app asks which copy to use and
 downloads a backup of the copy you are replacing.
+
+Anonymous sessions are tied to the browser's saved session. Clearing site data
+or using another browser/device creates a different anonymous user; export
+regular backups because an anonymous user cannot recover its account by email.
 
 **Back up regularly.** Settings → *Back up to file* writes a JSON file
 containing everything: accounts, trades, notes and bar data. *Restore backup*
@@ -144,15 +149,12 @@ Treat the JSON backup as an independent recovery copy.
 ## Deploy to Vercel with Supabase
 
 1. Create a Supabase project.
-2. In Supabase Authentication, enable **Google** sign-in and configure its
-   Google OAuth credentials.
-3. In Supabase Authentication URL configuration, add your Vercel production
-   domain and any preview domains you use as redirect URLs.
-4. Run [supabase.sql](./supabase.sql) in the Supabase SQL editor. It creates the
+2. In Supabase Authentication settings, enable **Anonymous Sign-Ins**.
+3. Run [supabase.sql](./supabase.sql) in the Supabase SQL editor. It creates the
    `trader_edge_journals` table and owner-only row-level security policies.
-5. Import this repository into Vercel. The included `vercel.json` runs the build
+4. Import this repository into Vercel. The included `vercel.json` runs the build
    and serves the generated `dist` directory.
-6. Add these Vercel environment variables for every environment you deploy:
+5. Add these Vercel environment variables for every environment you deploy:
 
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
@@ -160,8 +162,8 @@ Treat the JSON backup as an independent recovery copy.
    Use the project URL and public anon key from Supabase **Project Settings →
    API**, then redeploy. These client values are embedded in the browser app.
    **Never put the Supabase service-role key in this app or in a client-side
-   environment variable.** Security comes from Supabase Authentication and the
-   deployed row-level security policies.
+   environment variable.** Security comes from Supabase Auth's anonymous
+   sessions and the deployed row-level security policies.
 
 The app only connects to Supabase when built with the variables above. Its source
 HTML remains local-only. Price bars still need to be imported from CSV; the app
