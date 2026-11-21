@@ -2,8 +2,8 @@
 https://smackey321.github.io/trader-edge-tracker/
 
 An offline-capable trading journal in a single HTML file. Open the source file
-without Firebase configuration to keep data in your browser, or build and deploy
-the app to Vercel with Firebase configuration for Google sign-in and cloud sync.
+without Supabase configuration to keep data in your browser, or build and deploy
+the app to Vercel with Supabase configuration for Google sign-in and cloud sync.
 
 Built for futures traders in particular, but it handles stocks, options, forex
 and crypto too.
@@ -120,19 +120,17 @@ The standalone source file uses this browser's local storage and does not
 connect to a server. Clearing browser data or switching browsers can make that
 local journal unavailable.
 
-The Vercel build uses Google sign-in, Firestore, and Firebase Storage. Accounts,
-trades, and journal notes are stored in Firestore under the signed-in user's ID.
-Trade screenshots and imported bar sets are stored as private Firebase Storage
-objects under that same user's ID. The included Firestore and Storage rules
-restrict reads and writes to the authenticated owner. Review and deploy those
-rules to your Firebase project before using the cloud deployment.
+The Vercel build uses Google sign-in and Supabase. Accounts, trades, journal
+notes, screenshots, and imported bar sets are stored as JSON in a row owned by
+the signed-in user. The included SQL enables row-level security so only that
+authenticated user can read or write their journal.
 
 Before switching from the standalone/local version to Vercel, export a JSON
 backup from the version that currently holds your trades. Browser storage from
 `file://` or another site is not automatically visible to the Vercel domain;
 after signing in, use **Settings → Restore backup** to import that file. Device
-caches created by the cloud version are scoped to the signed-in Google account.
-If a device cache differs from Firebase, the app asks which copy to use and
+caches created by the cloud version are scoped to the signed-in Supabase account.
+If a device cache differs from Supabase, the app asks which copy to use and
 downloads a backup of the copy you are replacing.
 
 **Back up regularly.** Settings → *Back up to file* writes a JSON file
@@ -143,35 +141,31 @@ Treat the JSON backup as an independent recovery copy.
 
 ---
 
-## Deploy to Vercel with Firebase
+## Deploy to Vercel with Supabase
 
-1. Create a Firebase project and register a **Web app**.
-2. In Firebase Authentication, enable **Google** sign-in and add your Vercel
-   production domain (and any preview domains you use) to the authorized domains.
-3. Create a Firestore database and a Firebase Storage bucket.
-4. From the project root, deploy the included owner-only rules with the Firebase
-   CLI: `firebase deploy --project YOUR_FIREBASE_PROJECT_ID --only firestore:rules,storage`.
+1. Create a Supabase project.
+2. In Supabase Authentication, enable **Google** sign-in and configure its
+   Google OAuth credentials.
+3. In Supabase Authentication URL configuration, add your Vercel production
+   domain and any preview domains you use as redirect URLs.
+4. Run [supabase.sql](./supabase.sql) in the Supabase SQL editor. It creates the
+   `trader_edge_journals` table and owner-only row-level security policies.
 5. Import this repository into Vercel. The included `vercel.json` runs the build
    and serves the generated `dist` directory.
 6. Add these Vercel environment variables for every environment you deploy:
 
-   - `FIREBASE_API_KEY`
-   - `FIREBASE_AUTH_DOMAIN`
-   - `FIREBASE_PROJECT_ID`
-   - `FIREBASE_STORAGE_BUCKET`
-   - `FIREBASE_MESSAGING_SENDER_ID`
-   - `FIREBASE_APP_ID`
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
 
-   Use the values from the Firebase **Web app configuration**, then redeploy.
-   These client configuration values are embedded in the browser app; they are
-   not service-account credentials. **Never put a service-account private key
-   in this app or in a client-side environment variable.** Security comes from
-   Firebase Authentication and the deployed owner-only rules.
+   Use the project URL and public anon key from Supabase **Project Settings →
+   API**, then redeploy. These client values are embedded in the browser app.
+   **Never put the Supabase service-role key in this app or in a client-side
+   environment variable.** Security comes from Supabase Authentication and the
+   deployed row-level security policies.
 
-The app only connects to Firebase when built with the variables above. Its source
+The app only connects to Supabase when built with the variables above. Its source
 HTML remains local-only. Price bars still need to be imported from CSV; the app
-does not download market data. Firebase Storage availability and billing depend
-on your Firebase project and plan.
+does not download market data.
 
 ---
 
@@ -208,7 +202,7 @@ futures and other leveraged instruments involves substantial risk of loss.
 ## Contributing
 
 The app UI is still a single HTML file. The Vercel build uses Node's built-in
-modules only and loads the Firebase SDK from Google's CDN at runtime. Keep
+modules only and loads the Supabase SDK from jsDelivr at runtime. Keep
 changes small and focused, and describe what you changed and why.
 
 No dependencies will be added. If a feature needs a library, it doesn't belong

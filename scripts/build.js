@@ -1,39 +1,35 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const envPath = path.join(__dirname, "..", ".env");
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, "utf8").split(/\r?\n/).forEach(function(line){
+    var match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (match && process.env[match[1]] === undefined) process.env[match[1]] = match[2];
+  });
+}
+
 const variableNames = [
-  "FIREBASE_API_KEY",
-  "FIREBASE_AUTH_DOMAIN",
-  "FIREBASE_PROJECT_ID",
-  "FIREBASE_STORAGE_BUCKET",
-  "FIREBASE_MESSAGING_SENDER_ID",
-  "FIREBASE_APP_ID"
+  "SUPABASE_URL",
+  "SUPABASE_ANON_KEY"
 ];
 const missing = variableNames.filter((name) => !process.env[name]);
 
 if (missing.length) {
-  throw new Error(`Missing Firebase build variables: ${missing.join(", ")}`);
+  throw new Error(`Missing Supabase build variables: ${missing.join(", ")}`);
 }
 
 const config = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.FIREBASE_APP_ID
+  url: process.env.SUPABASE_URL,
+  anonKey: process.env.SUPABASE_ANON_KEY
 };
 const configLiteral = JSON.stringify(config).replace(/</g, "\\u003c");
 const replacements = [
-  ["window.__FIREBASE_CONFIG__ = null;", `window.__FIREBASE_CONFIG__ = ${configLiteral};`],
-  ["script-src 'unsafe-inline';", "script-src 'unsafe-inline' https://www.gstatic.com https://apis.google.com;"],
+  ["window.__SUPABASE_CONFIG__ = null;", `window.__SUPABASE_CONFIG__ = ${configLiteral};`],
+  ["script-src 'unsafe-inline';", "script-src 'unsafe-inline' https://cdn.jsdelivr.net;"],
   [
     "connect-src 'none';",
-    "connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasestorage.googleapis.com https://firebaseinstallations.googleapis.com https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com;"
-  ],
-  [
-    "frame-src 'none';",
-    "frame-src https://*.firebaseapp.com https://accounts.google.com https://*.google.com;"
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co;"
   ]
 ];
 
