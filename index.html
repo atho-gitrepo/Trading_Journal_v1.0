@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
   The source file stays local-only. The Vercel build enables only the Supabase
-  endpoints needed for Supabase anonymous sessions and this user's journal.
+  endpoints needed for Supabase email accounts and this user's journal.
 -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'none';
@@ -859,7 +859,6 @@ var Store = {
     var config = window.__SUPABASE_CONFIG__;
     if (config && config.url && config.anonKey){
       try{
-        this.mode = "supabase";
         var mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
         this.authModule = mod;
         this.api = mod.createClient(config.url,config.anonKey,{
@@ -870,28 +869,27 @@ var Store = {
         this.auth.onAuthStateChange(function(event,session){
           if (event === "PASSWORD_RECOVERY") Store.recoveryMode = true;
           Store.user = session ? session.user : null;
+          Store.mode = session ? "supabase" : "local";
           renderAccountPanel();
         });
         var sessionResult = await this.auth.getSession();
         if (sessionResult.error) throw sessionResult.error;
         var session = sessionResult.data.session;
-        if (!session){
-          var authResult = await this.auth.signInAnonymously();
-          if (authResult.error) throw authResult.error;
-          session = authResult.data.session;
-        }
-        if (!session) throw new Error("Supabase did not create an anonymous session.");
-        this.user = session.user;
-        return;
+        this.user = session ? session.user : null;
+        this.mode = session ? "supabase" : "local";
       }catch(error){
         this.mode = "local";
-        toast("Supabase account access failed; using this browser only: "+error.message);
+        toast((this.auth
+          ? "Could not restore the Supabase session; you can still try email sign-in. Changes stay in this browser until then: "
+          : "Supabase account access failed; this journal will stay in this browser: ")+error.message);
       }
     }
     try{
       localStorage.setItem("__t","1"); localStorage.removeItem("__t");
-      this.mode = "local";
-    }catch(e){ this.mode = "memory"; }
+      if (this.mode !== "supabase") this.mode = "local";
+    }catch(e){
+      if (this.mode !== "supabase") this.mode = "memory";
+    }
   },
   async loadLocal(){
     if (this.mode === "memory") return this.mem;
@@ -1037,18 +1035,21 @@ function updateSyncStatus(status){
 function renderAccountPanel(){
   var panel = $("accountPanel");
   if (!panel) return;
-  var available = Store.mode === "supabase";
+  var available = !!Store.auth;
   panel.style.display = available ? "" : "none";
   $("accountTopBtn").style.display = available ? "" : "none";
   if (!available) return;
 
   var permanent = !!(Store.user && !Store.user.is_anonymous);
+  var temporary = !!(Store.user && Store.user.is_anonymous);
   $("accountTopBtn").textContent = permanent ? "Account" : "Sign in";
   $("accountIntro").textContent = Store.recoveryMode
     ? "Choose a new password for your account."
     : permanent
       ? "Your journal is linked to this email account and syncs across devices."
-      : "This journal is currently in a temporary browser session. Create an account or sign in to access it from other devices.";
+      : temporary
+        ? "This journal is in a temporary session on this device. Create an account or sign in to access it elsewhere."
+        : "Sign in or create an email account to sync this journal across devices. Until then, changes stay in this browser.";
 
   $("accountForm").style.display = permanent && !Store.recoveryMode ? "none" : "";
   $("accountSignedIn").style.display = permanent && !Store.recoveryMode ? "" : "none";
@@ -3307,7 +3308,7 @@ function hasJournalContent(data){
   });
 }
 async function stageJournalForAccount(email){
-  if (!Store.user || !Store.user.is_anonymous) return;
+  if (!Store.auth || (Store.user && !Store.user.is_anonymous)) return;
   if (!hasJournalContent(state)) return;
   Store.stageAccountMigration(email,state);
   clearTimeout(saveTimer);

@@ -120,26 +120,25 @@ The standalone source file uses this browser's local storage and does not
 connect to a server. Clearing browser data or switching browsers can make that
 local journal unavailable.
 
-The Vercel build starts with a private temporary Supabase session. To sync your
-journal between devices, open **Settings → Account access** and create an account
-with your email and password, or sign in to an existing account. Accounts,
-trades, journal notes, screenshots, and imported bar sets are stored in a row
-protected by row-level security. Your password is handled by Supabase Auth and
-is never stored in the journal.
+The cloud build displays email/password account controls even when signed out;
+anonymous sign-ins are not required. Open **Settings → Account access** to create
+an account or sign in. Accounts, trades, journal notes, screenshots, and
+imported bar sets are stored in a row protected by row-level security. Your
+password is handled by Supabase Auth and is never stored in the journal.
 
 Before switching from the standalone/local version to Vercel, export a JSON
 backup from the version that currently holds your trades. Browser storage from
 `file://` or another site is not automatically visible to the Vercel domain;
 use **Settings → Restore backup** to import that file. When you create an
-account or sign in from a browser with a temporary journal, the app offers to
+account or sign in from a browser with unsynced local data, the app offers to
 copy that journal to your account if it differs from the cloud copy. The cloud
-copy is backed up before it is replaced.
-If email confirmation is enabled, verify your address and return to the same
-browser to finish moving its temporary journal into your account.
+copy is backed up before it is replaced. If email confirmation is enabled,
+verify your address, then return to the same browser and sign in to complete the
+copy.
 
-Temporary journals are tied to the browser session. Create or sign in to an
-email account to access your data from other devices. Keep a backup before
-clearing browser data or switching devices.
+Before signing in, changes are saved in that browser only. Create or sign in to
+an email account to store the journal in Supabase and access it from other
+devices. Keep a backup before clearing browser data or switching devices.
 
 **Back up regularly.** Settings → *Back up to file* writes a JSON file
 containing everything: accounts, trades, notes and bar data. *Restore backup*
@@ -152,8 +151,7 @@ Treat the JSON backup as an independent recovery copy.
 ## Deploy to Vercel with Supabase
 
 1. Create a Supabase project.
-2. In Supabase Authentication settings, enable the **Email** provider and
-   **Anonymous Sign-Ins**.
+2. In Supabase Authentication settings, enable the **Email** provider.
 3. Configure the Supabase **Site URL** and allowed redirect URLs for your Vercel
    production and preview domains so email verification and password reset
    links return to the app.
