@@ -285,6 +285,7 @@ label.f > span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;colo
   .topbar .brand{order:1}
   #acctSel{order:2;flex:1 1 auto;max-width:none;min-width:0}
   #addBtn{order:3}
+  #accountTopBtn{order:4}
   nav{order:6;flex:0 0 100%;width:100%;margin-top:8px;padding:2px 0 6px;
       border-top:1px solid var(--line-soft);overflow-x:auto}
   .tab{padding:8px 12px}
@@ -348,6 +349,7 @@ label.f > span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;colo
     <button class="tab" data-view="settings">Settings</button>
   </nav>
   <span id="syncStatus" class="hint" aria-live="polite" style="display:none"></span>
+  <button class="btn btn-sm" id="accountTopBtn" style="display:none">Account</button>
   <button class="btn btn-primary" id="addBtn">+ Log trade</button>
 </div>
 
@@ -356,8 +358,8 @@ label.f > span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;colo
     <b>Read this once.</b> Trader Edge Tracker is a record-keeping tool, not financial advice, and it
     gives no trade recommendations or forecasts. P&amp;L is computed from what you enter and from a built-in
     contract spec table that can be incomplete or out of date, so reconcile against your broker statements
-    and use your broker&rsquo;s records for taxes. When cloud sync is enabled, journal data is stored in your
-    anonymous Supabase session; otherwise it stays in this browser. Back up regularly. Provided as-is with no warranty.
+    and use your broker&rsquo;s records for taxes. Cloud journals are stored in your private Supabase account;
+    otherwise they stay in this browser. Back up regularly. Provided as-is with no warranty.
     Trading leveraged products carries substantial risk of loss.
     <div style="margin-top:10px"><button class="btn btn-sm btn-primary" id="firstRunOk">Understood</button></div>
   </div>
@@ -520,6 +522,30 @@ label.f > span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;colo
       <button class="btn btn-sm btn-primary" id="acctAdd">Add account</button></div>
     <div class="panel" id="acctList"></div>
 
+    <div class="sec-head"><h2 class="sec">Account access</h2><div class="rule"></div></div>
+    <div class="panel" id="accountPanel" style="padding:18px;display:none">
+      <p class="hint" id="accountIntro" style="margin-top:0"></p>
+      <div id="accountForm">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <label class="f" id="accountEmailField" style="flex:1 1 220px"><span>Email</span>
+            <input id="accountEmail" type="email" autocomplete="email" required></label>
+          <label class="f" id="accountPasswordField" style="flex:1 1 180px"><span id="accountPasswordLabel">Password</span>
+            <input id="accountPassword" type="password" autocomplete="current-password" minlength="6" required></label>
+        </div>
+        <div id="accountAuthButtons" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="btn btn-primary" id="accountCreateBtn">Create account</button>
+          <button class="btn" id="accountSignInBtn">Sign in</button>
+          <button class="btn" id="accountResetBtn">Forgot password?</button>
+        </div>
+        <button class="btn btn-primary" id="accountUpdatePasswordBtn" style="display:none;margin-top:12px">Set new password</button>
+      </div>
+      <div id="accountSignedIn" style="display:none">
+        <p class="hint" id="accountSignedInAs"></p>
+        <button class="btn" id="accountSignOutBtn">Sign out</button>
+      </div>
+      <p class="hint" id="accountMessage" aria-live="polite" style="margin:12px 0 0"></p>
+    </div>
+
     <div class="sec-head"><h2 class="sec">Import</h2><div class="rule"></div></div>
     <div class="panel" style="padding:18px">
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -534,7 +560,7 @@ label.f > span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;colo
 
     <div class="sec-head"><h2 class="sec">Your data</h2><div class="rule"></div></div>
     <div class="panel" style="padding:18px">
-      <p class="hint" style="margin-top:0">Cloud-enabled deployments save your journal to an anonymous Supabase session. The standalone file stores data in this browser. Back up regularly.</p>
+      <p class="hint" style="margin-top:0">Create or sign in to a Supabase email account in Account access to sync this journal across devices. The standalone file stores data in this browser. Back up regularly.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
         <button class="btn btn-primary" id="expBtn">Back up to file</button>
         <button class="btn" id="csvBtn2">Export CSV</button>
@@ -565,8 +591,8 @@ label.f > span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;colo
         Trading futures and other leveraged instruments involves substantial risk of loss. Past results shown
         in this journal do not predict future performance.</div>
       <div class="disc"><b>Your data storage depends on how you run the app.</b> The standalone source file
-        stores data in this browser and does not connect to a server. A cloud-enabled deployment uses an
-        anonymous Supabase session for your journal. Review your Supabase row-level security policy and keep
+        stores data in this browser and does not connect to a server. A cloud-enabled deployment uses Supabase
+        email accounts for private cross-device sync. Review your Supabase row-level security policy and keep
         JSON backups; clearing browser data does not delete cloud records, but deleting your Supabase project
         or account can.</div>
       <div class="disc"><b>Replay price data.</b> The app does not download market data; price bars for candle
@@ -825,8 +851,9 @@ var APP_NAME = "Trader Edge Tracker";
 var APP_VERSION = "1.0.5";
 var KEY = "traderedge.journal.v2";
 var LEGACY_KEYS = ["ledger.journal.v2","ledger.journal.v1"];
+var ACCOUNT_MIGRATION_KEY = KEY+".account-migration";
 var Store = {
-  mode:"memory", mem:null, api:null, auth:null, user:null,
+  mode:"memory", mem:null, api:null, auth:null, authModule:null, user:null, recoveryMode:false,
   cached:null, queue:Promise.resolve(),
   async init(){
     var config = window.__SUPABASE_CONFIG__;
@@ -834,10 +861,17 @@ var Store = {
       try{
         this.mode = "supabase";
         var mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+        this.authModule = mod;
         this.api = mod.createClient(config.url,config.anonKey,{
           auth:{persistSession:true,detectSessionInUrl:true,autoRefreshToken:true}
         });
         this.auth = this.api.auth;
+        this.recoveryMode = new URLSearchParams(location.hash.slice(1)).get("type") === "recovery";
+        this.auth.onAuthStateChange(function(event,session){
+          if (event === "PASSWORD_RECOVERY") Store.recoveryMode = true;
+          Store.user = session ? session.user : null;
+          renderAccountPanel();
+        });
         var sessionResult = await this.auth.getSession();
         if (sessionResult.error) throw sessionResult.error;
         var session = sessionResult.data.session;
@@ -851,7 +885,7 @@ var Store = {
         return;
       }catch(error){
         this.mode = "local";
-        toast("Supabase anonymous access failed; using this browser only: "+error.message);
+        toast("Supabase account access failed; using this browser only: "+error.message);
       }
     }
     try{
@@ -881,7 +915,7 @@ var Store = {
     return this.loadLocal();
   },
   async loadSupabase(){
-    if (!this.user) throw new Error("The anonymous Supabase session is unavailable. Reload the app to retry.");
+    if (!this.user) throw new Error("No active Supabase session. Reload the app to retry.");
     var result = await this.api.from("trader_edge_journals")
       .select("data")
       .eq("user_id",this.user.id)
@@ -892,8 +926,31 @@ var Store = {
     return loaded;
   },
   clone(value){ return JSON.parse(JSON.stringify(value)); },
+  stageAccountMigration(email,data){
+    var pending = {
+      email:String(email).trim().toLowerCase(),
+      data:this.clone(data),
+      createdAt:Date.now()
+    };
+    localStorage.setItem(ACCOUNT_MIGRATION_KEY,JSON.stringify(pending));
+  },
+  pendingAccountMigration(){
+    if (!this.user || this.user.is_anonymous || !this.user.email) return null;
+    try{
+      var raw = localStorage.getItem(ACCOUNT_MIGRATION_KEY);
+      if (!raw) return null;
+      var pending = JSON.parse(raw);
+      return pending.email === this.user.email.toLowerCase() ? pending.data : null;
+    }catch(error){
+      toast("The saved account-transfer copy could not be read: "+error.message);
+      return null;
+    }
+  },
+  clearAccountMigration(){
+    localStorage.removeItem(ACCOUNT_MIGRATION_KEY);
+  },
   async syncSupabase(data){
-    if (!this.user) throw new Error("The anonymous Supabase session is unavailable. Reload the app to retry.");
+    if (!this.user) throw new Error("No active Supabase session. Reload the app to retry.");
     var result = await this.api.from("trader_edge_journals").upsert({
       user_id:this.user.id,
       data:data,
@@ -976,6 +1033,33 @@ function updateSyncStatus(status){
   el.style.display = "inline";
   el.textContent = status === "syncing" ? "Syncing…" : status === "error" ? "Sync failed" : "Synced";
   el.className = status === "error" ? "hint neg" : "hint";
+}
+function renderAccountPanel(){
+  var panel = $("accountPanel");
+  if (!panel) return;
+  var available = Store.mode === "supabase";
+  panel.style.display = available ? "" : "none";
+  $("accountTopBtn").style.display = available ? "" : "none";
+  if (!available) return;
+
+  var permanent = !!(Store.user && !Store.user.is_anonymous);
+  $("accountTopBtn").textContent = permanent ? "Account" : "Sign in";
+  $("accountIntro").textContent = Store.recoveryMode
+    ? "Choose a new password for your account."
+    : permanent
+      ? "Your journal is linked to this email account and syncs across devices."
+      : "This journal is currently in a temporary browser session. Create an account or sign in to access it from other devices.";
+
+  $("accountForm").style.display = permanent && !Store.recoveryMode ? "none" : "";
+  $("accountSignedIn").style.display = permanent && !Store.recoveryMode ? "" : "none";
+  $("accountEmailField").style.display = Store.recoveryMode ? "none" : "";
+  $("accountAuthButtons").style.display = Store.recoveryMode || permanent ? "none" : "flex";
+  $("accountUpdatePasswordBtn").style.display = Store.recoveryMode ? "" : "none";
+  $("accountPasswordLabel").textContent = Store.recoveryMode ? "New password" : "Password";
+  $("accountPassword").autocomplete = Store.recoveryMode ? "new-password" : "current-password";
+  $("accountPassword").required = !Store.recoveryMode ? !permanent : true;
+  $("accountEmail").required = !Store.recoveryMode && !permanent;
+  if (permanent) $("accountSignedInAs").textContent = "Signed in as " + (Store.user.email || "your email account");
 }
 function groupBy(list, fn){
   var o = {};
@@ -1583,7 +1667,7 @@ function renderSettings(){
       '<button class="btn btn-sm" data-acctedit="'+a.id+'">Edit</button></div></div>';
   }).join("");
   var kb = Store.bytes()/1024;
-  var where = Store.mode==="supabase" ? "your anonymous Supabase session" : Store.mode==="local" ? "this browser profile on this PC" : "memory only (this session)";
+  var where = Store.mode==="supabase" ? Store.user && !Store.user.is_anonymous ? "your Supabase account" : "a temporary Supabase session" : Store.mode==="local" ? "this browser profile on this PC" : "memory only (this session)";
   var nBars = Object.keys(state.bars||{}).length;
   $("storeInfo").innerHTML = "Saved in " + where + " · " + state.trades.length + " trades · " + nBars + " bar sets · " +
     (kb>1024 ? (kb/1024).toFixed(2)+" MB" : kb.toFixed(0)+" KB") + " used" +
@@ -3201,9 +3285,140 @@ function journalSignature(data){
   }
   return JSON.stringify(stable(normalized));
 }
+function setAccountMessage(message,isError){
+  var el = $("accountMessage");
+  el.textContent = message;
+  el.className = isError ? "hint neg" : "hint";
+}
+function hasJournalContent(data){
+  if ((data.trades||[]).length || Object.keys(data.bars||{}).length) return true;
+  var hasNotes = Object.keys(data.notes||{}).some(function(accountId){
+    return Object.keys(data.notes[accountId]||{}).some(function(date){
+      return String(data.notes[accountId][date]||"").trim() !== "";
+    });
+  });
+  if (hasNotes || (data.accounts||[]).length > 1) return true;
+  var account = (data.accounts||[])[0];
+  if (!account) return false;
+  var defaults = {name:"Main",type:"futures",currency:"$",startingBalance:50000,
+    comm:0,target:null,maxDD:null,ddType:"trailing",dailyLoss:null};
+  return Object.keys(defaults).some(function(key){
+    return account[key] !== defaults[key];
+  });
+}
+async function stageJournalForAccount(email){
+  if (!Store.user || !Store.user.is_anonymous) return;
+  if (!hasJournalContent(state)) return;
+  Store.stageAccountMigration(email,state);
+  clearTimeout(saveTimer);
+  await Store.save(state);
+}
+$("accountTopBtn").addEventListener("click",function(){
+  $("nav").querySelector('[data-view="settings"]').click();
+  $("accountPanel").scrollIntoView({behavior:"smooth",block:"start"});
+});
+$("accountCreateBtn").addEventListener("click",async function(){
+  var email = $("accountEmail").value.trim();
+  var password = $("accountPassword").value;
+  if (!$("accountEmail").reportValidity() || !$("accountPassword").reportValidity()) return;
+  $("accountCreateBtn").disabled = true;
+  setAccountMessage("Creating your account…",false);
+  try{
+    await stageJournalForAccount(email);
+    var config = window.__SUPABASE_CONFIG__;
+    var signupClient = Store.authModule.createClient(config.url,config.anonKey,{
+      auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
+    });
+    var result = await signupClient.auth.signUp({
+      email:email,
+      password:password,
+      options:{emailRedirectTo:location.origin+location.pathname}
+    });
+    if (result.error) throw result.error;
+    if (result.data.session && !result.data.session.user.is_anonymous){
+      var sessionResult = await Store.auth.signInWithPassword({email:email,password:password});
+      if (sessionResult.error) throw sessionResult.error;
+      if (!sessionResult.data.session) throw new Error("Supabase did not return a signed-in account session.");
+      location.reload();
+      return;
+    }
+    setAccountMessage("Check your email to confirm the account, then return here and sign in to finish transferring this browser's journal.",false);
+  }catch(error){
+    setAccountMessage("Could not create the account: "+error.message,true);
+  }finally{
+    $("accountCreateBtn").disabled = false;
+  }
+});
+$("accountSignInBtn").addEventListener("click",async function(){
+  var email = $("accountEmail").value.trim();
+  var password = $("accountPassword").value;
+  if (!$("accountEmail").reportValidity() || !$("accountPassword").reportValidity()) return;
+  $("accountSignInBtn").disabled = true;
+  setAccountMessage("Signing in…",false);
+  try{
+    await stageJournalForAccount(email);
+    var result = await Store.auth.signInWithPassword({email:email,password:password});
+    if (result.error) throw result.error;
+    if (!result.data.session || result.data.user.is_anonymous)
+      throw new Error("Supabase did not return a permanent account session.");
+    location.reload();
+  }catch(error){
+    setAccountMessage("Could not sign in: "+error.message,true);
+    $("accountSignInBtn").disabled = false;
+  }
+});
+$("accountResetBtn").addEventListener("click",async function(){
+  var email = $("accountEmail").value.trim();
+  if (!$("accountEmail").reportValidity()) return;
+  $("accountResetBtn").disabled = true;
+  setAccountMessage("Sending password reset email…",false);
+  try{
+    var result = await Store.auth.resetPasswordForEmail(email,{
+      redirectTo:location.origin+location.pathname
+    });
+    if (result.error) throw result.error;
+    setAccountMessage("If an account exists for that email, Supabase will send a password reset link.",false);
+  }catch(error){
+    setAccountMessage("Could not send the reset email: "+error.message,true);
+  }finally{
+    $("accountResetBtn").disabled = false;
+  }
+});
+$("accountUpdatePasswordBtn").addEventListener("click",async function(){
+  var password = $("accountPassword").value;
+  if (!$("accountPassword").reportValidity()) return;
+  $("accountUpdatePasswordBtn").disabled = true;
+  try{
+    var result = await Store.auth.updateUser({password:password});
+    if (result.error) throw result.error;
+    Store.recoveryMode = false;
+    history.replaceState(null,"",location.pathname+location.search);
+    $("accountPassword").value = "";
+    setAccountMessage("Your password was updated.",false);
+    renderAccountPanel();
+  }catch(error){
+    setAccountMessage("Could not update the password: "+error.message,true);
+  }finally{
+    $("accountUpdatePasswordBtn").disabled = false;
+  }
+});
+$("accountSignOutBtn").addEventListener("click",async function(){
+  $("accountSignOutBtn").disabled = true;
+  try{
+    clearTimeout(saveTimer);
+    if (!await Store.save(state)) throw new Error("The latest journal changes could not be saved.");
+    var result = await Store.auth.signOut();
+    if (result.error) throw result.error;
+    location.reload();
+  }catch(error){
+    setAccountMessage("Could not sign out safely: "+error.message,true);
+    $("accountSignOutBtn").disabled = false;
+  }
+});
 async function boot(){
   try{
     await Store.init();
+    renderAccountPanel();
     var saved;
     try{
       saved = await Store.load();
@@ -3219,7 +3434,42 @@ async function boot(){
     }
     if (Store.mode === "supabase"){
       var local = await Store.loadLocal();
-      if (!saved && local){
+      var pendingAccountData = Store.pendingAccountMigration();
+      if (pendingAccountData){
+        var pendingState = migrate(pendingAccountData);
+        var existingAccountData = saved ? migrate(saved) : local ? migrate(local) : null;
+        var keepPendingMigration = false;
+        if (!existingAccountData){
+          state = pendingState;
+          var initialMigrationSaved = await Store.save(state);
+          saved = state;
+          if (initialMigrationSaved) toast("Your browser journal was copied to your account.");
+          else{
+            keepPendingMigration = true;
+            toast("The journal is available in this browser, but its account sync failed. Your transfer copy is retained; try again when online.");
+          }
+        }else{
+          var accountState = existingAccountData;
+          if (journalSignature(pendingState) !== journalSignature(accountState)){
+            if (confirm("This browser has a guest journal that differs from the signed-in account. OK backs up the account journal and copies the guest journal to it. Cancel keeps the account journal and downloads the guest journal as a backup.")){
+              download("trader-edge-account-before-guest-import-"+todayISO()+".json",JSON.stringify(accountState,null,2));
+              state = pendingState;
+              var guestMigrationSaved = await Store.save(state);
+              saved = state;
+              if (guestMigrationSaved) toast("The guest journal was copied to your account; the previous account journal was backed up.");
+              else{
+                keepPendingMigration = true;
+                toast("The journal is available in this browser, but its account sync failed. Your transfer copy is retained; try again when online.");
+              }
+            }else{
+              download("trader-edge-guest-journal-"+todayISO()+".json",JSON.stringify(pendingState,null,2));
+              state = accountState;
+              toast("The account journal was kept; the guest journal was downloaded as a backup.");
+            }
+          }else state = accountState;
+        }
+        if (!keepPendingMigration) Store.clearAccountMigration();
+      }else if (!saved && local){
         state = migrate(local);
         if (!await Store.save(state)) throw new Error("The existing browser journal could not be uploaded.");
         saved = state;
